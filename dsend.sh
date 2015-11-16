@@ -2,7 +2,7 @@
 
 # author: Fulltimegeek <fulltimegeek@protonmail.com>
 # purpose: Used to send cryptocurrency transactions from local wallet
-# dependencies: jq
+# dependencies: jq (Command-line JSON processor), bc (An arbitrary precision calculator language)
 
 # these variables are user specific
 cli="/usr/share/dash-0.12.0/bin/dash-cli -testnet"   # this should point to the "dash-cli" file
@@ -103,6 +103,13 @@ jq &> /dev/null
 if [ $? -eq 127 ]
 then
    error "Dependency 'jq' must be in your path. Example how to install: 'sudo apt-get install jq'"
+   exit 201
+fi
+
+bc &> /dev/null 
+if [ $? -eq 127 ]
+then
+   error "Dependency 'bc' must be in your path. Example how to install: 'sudo apt-get install bc'"
    exit 201
 fi
 
