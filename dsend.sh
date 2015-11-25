@@ -8,6 +8,7 @@
 cli="/usr/share/dash-0.12.0/bin/dash-cli -testnet"   # this should point to the "dash-cli" file
 passphrase="test"   # enter your passphrase here (wallet must be encrypted)
 is_masternode=1 # set to 1(true) if wallet contains any masternode addresses
+is_wallet_locked=1 # set to 1(true) if wallet is locked
 
 # granular variables for transaction creation
 max_fee=.25      # this is just a sanity check, the fee should never be higher than this
@@ -148,7 +149,7 @@ list_tx_inputs () {
 get_unspent () {
     balance=0 # total money from listunspent ... not including 1000 inputs if is_masternode=1
     added=0 # how many transactions have been added to produce balance
-
+    mn_inputs=0
     idx=0
     loop=0
     unspent=`$cli listunspent $minConf 2> /dev/null`
@@ -173,14 +174,18 @@ get_unspent () {
 	    if  ! [[ $v_amount =~ $re ]]  # checking if v_amount has any decimal points
 	    then
 	       accepted=1
-            elif [ "$is_masternode" -eq 1 ]
-               then
-                  if ! [ "$v_amount" -eq 1000 ];
+            fi
+
+            if [ "$is_masternode" -eq 1 ] && [ "$accepted" -eq 0 ]
+            then
+                  if [ "$v_amount" -eq 1000 ];
                   then
+                     mn_inputs=$((mn_inputs+1))
+                  else
                      accepted=1
                   fi
             else
-               accepted=1
+                 accepted=1
             fi
 
             if [ $accepted -eq 1 ]
@@ -231,7 +236,8 @@ create_transaction () {
         sending=`echo $disposable | bc`
     fi
 
-    tag balance $balance
+    real_balance=`$cli getinfo | jq '.balance'`
+    tag balance $real_balance
     tag disposable $disposable
 
     tx=\[
@@ -300,11 +306,14 @@ get_privs () {
     idx=0
     priv_str=\[
     comment "Acquiring necessary private keys..."
-    $cli walletpassphrase "$passphrase" 2 2> /dev/null
-    if ! [ $? -eq 0 ]
+    if [ "$is_wallet_locked" -eq 1 ];
     then
-        error "Failed to unlock wallet. Wallet must be encrypted and passphrase needs to be correct."
-        exit 4
+       $cli walletpassphrase "$passphrase" 2 2> /dev/null
+       if ! [ $? -eq 0 ]
+       then
+          error "Failed to unlock wallet. Please confirm that the passphrase is correct."
+           exit 4
+       fi
     fi
     while [ $idx -lt $input_tx ]
     do
@@ -341,12 +350,22 @@ send_transaction () {
     comment Sending raw transaction...
     created_tx=`$cli sendrawtransaction $1 2>/dev/null`
     comment TXID $created_tx
+    real_balance=`$cli getinfo | jq '.balance'`
     if  [ -z $created_tx ]
     then
            error Failed to send transaction error:$?
             exit 10
     else
-        success Transaction sent
+        locked=0
+        if [ "$is_masternode" -eq 1 ];
+        then
+            avail=`echo $balance+$locked-$sending-$fee | bc`
+            locked=`echo $real_balance-$avail | bc`
+            #tag locked $locked
+            tag disposable $avail
+        fi
+         tag balance `echo $real_balance`
+         success Transaction sent
     fi
 }
 
