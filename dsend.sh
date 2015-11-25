@@ -106,7 +106,7 @@ then
    exit 201
 fi
 
-bc &> /dev/null 
+bc -h &> /dev/null 
 if [ $? -eq 127 ]
 then
    error "Dependency 'bc' must be in your path. Example how to install: 'sudo apt-get install bc'"
